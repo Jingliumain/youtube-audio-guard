@@ -14,9 +14,14 @@ except Exception:
 class AudioGuardGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("YouTube Audio Guard v3 🌌")
+        self.root.title("YouTube Audio Guard v3.1 🌌")
         self.root.geometry("600x600")
         
+        # Dependency Check
+        ok, msg = core.check_dependencies()
+        if not ok:
+            messagebox.showwarning("Requirements Missing", msg)
+
         # Style
         style = ttk.Style()
         style.theme_use('clam')
@@ -105,7 +110,7 @@ class AudioGuardGUI:
                 self.current_stats = stats
                 self.root.after(0, self.on_analysis_complete, stats)
             else:
-                raise Exception("Could not retrieve statistics.")
+                raise Exception("Could not retrieve statistics. Ensure FFmpeg is working.")
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Error", f"Analysis failed: {str(e)}"))
             self.root.after(0, lambda: self.analyze_btn.config(state=tk.NORMAL))

@@ -2,6 +2,15 @@ import subprocess
 import re
 import os
 import json
+import shutil
+
+def check_dependencies():
+    """Check if ffmpeg and ffprobe are available in the system path"""
+    deps = ["ffmpeg", "ffprobe"]
+    missing = [d for d in deps if shutil.which(d) is None]
+    if missing:
+        return False, f"Missing dependencies: {', '.join(missing)}. Please install FFmpeg and add it to your PATH."
+    return True, ""
 
 def get_duration(file_path):
     """Get duration of media file in seconds"""
@@ -10,16 +19,23 @@ def get_duration(file_path):
         "-of", "default=noprint_wrappers=1:nokey=1", file_path
     ]
     try:
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            return 0.0
         return float(result.stdout.strip())
     except:
         return 0.0
 
 def run_ffmpeg_with_progress(cmd, duration, progress_callback):
     """Run FFmpeg and parse stderr for progress"""
-    process = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True, universal_newlines=True)
+    # On Windows, we need to handle subprocess slightly differently for 'noconsole' mode
+    startupinfo = None
+    if os.name == 'nt':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+    process = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True, universal_newlines=True, startupinfo=startupinfo)
     
-    # regex to find time=00:00:00.00
     time_regex = re.compile(r"time=(\d+):(\d+):(\d+).(\d+)")
     
     full_output = []
@@ -74,14 +90,13 @@ def normalize_audio(input_path, output_path, stats, codec_mode="copy", target_lu
     
     cmd = ["ffmpeg", "-threads", "0", "-i", input_path, "-af", loudnorm_filter]
     
-    # Video Codec Selection
     if codec_mode == "copy":
         cmd += ["-c:v", "copy"]
     elif codec_mode == "h264_cpu":
         cmd += ["-c:v", "libx264", "-preset", "faster", "-crf", "23"]
-    elif codec_mode == "h264_vaapi": # For Linux AMD/Intel
+    elif codec_mode == "h264_vaapi":
         cmd += ["-c:v", "h264_vaapi", "-vaapi_device", "/dev/dri/renderD128", "-vf", "format=nv12,hwupload"]
-    elif codec_mode == "h264_nvenc": # For NVIDIA
+    elif codec_mode == "h264_nvenc":
         cmd += ["-c:v", "h264_nvenc", "-preset", "fast"]
         
     cmd += ["-c:a", "aac", "-b:a", "192k", output_path, "-y"]
